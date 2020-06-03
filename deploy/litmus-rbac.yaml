@@ -11,9 +11,12 @@ metadata:
   name: sock-shop-chaos-engine
   namespace: sock-shop
 rules:
-- apiGroups: ["", "extensions", "apps", "batch", "litmuschaos.io"]
-  resources: ["daemonsets", "deployments", "replicasets", "jobs", "pods", "pods/exec","nodes","events", "chaosengines", "chaosexperiments", "chaosresults"]
-  verbs: ["*"]
+- apiGroups: ["","apps","batch","extensions","litmuschaos.io","openebs.io","storage.k8s.io"]
+  resources: ["chaosengines","chaosexperiments","chaosresults","cstorpools","cstorvolumereplicas","configmaps","secrets","pods","pods/exec","pods/log","pods/eviction","jobs","replicasets","deployments","daemonsets","statefulsets","persistentvolumeclaims","persistentvolumes","storageclasses","services","events"]
+  verbs: ["create","delete","get","list","patch","update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get","list","patch"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -28,33 +31,3 @@ subjects:
 - kind: ServiceAccount
   name: sock-shop-chaos-engine
   namespace: sock-shop
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kafka-chaos-engine
-  namespace: kafka
----
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: kafka-chaos-engine
-  namespace: kafka
-rules:
-- apiGroups: ["", "extensions", "apps", "batch", "litmuschaos.io"]
-  resources:  ["pods","deployments","jobs","pods/exec","statefulsets", "nodes", "configmaps", "secrets","chaosengines","chaosexperiments","chaosresults"]
-  verbs: ["*"]
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: kafka-chaos-engine
-  namespace: kafka
-roleRef:
-  kind: ClusterRole
-  name: kafka-chaos-engine
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: kafka-chaos-engine
-  namespace: kafka

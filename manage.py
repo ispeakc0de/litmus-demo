@@ -63,36 +63,18 @@ def start(args):
     print_color("\nGKE Cluster Running with following nodes:\n")
     run_shell(f"kubectl get nodes")
 
-    # Deploy Zebrium Collector using Helm
-    ze_deployment_name = "zebrium-k8s-demo"
-    ze_logs_url = "https://zapi03.zebrium.com"
-    ze_stats_url = "https://zapi03.zebrium.com/stats/api/v1/zstats"
-    run_shell("sleep 90") # Wait 1.5 mins for cluster to finish setting up fully
-    run_shell("kubectl create namespace zebrium")
-    run_shell(f"helm install zlog-collector --namespace zebrium --set zebrium.deployment={ze_deployment_name},zebrium.collectorUrl={ze_logs_url},zebrium.authToken={args.key} --repo https://raw.githubusercontent.com/zebrium/ze-kubernetes-collector/master/charts zlog-collector")
-    # Install Prometheus collector (EXPERIMENTAL)
-    run_shell(f"helm install zstats-collector --namespace zebrium --set zebrium.deployment={ze_deployment_name},zebrium.collectorUrl={ze_stats_url},zebrium.authToken={args.key} --repo https://raw.githubusercontent.com/zebrium/ze-stats/master/charts zstats")
-
     # Deploy all demo apps
     run_shell("kubectl create -f ./deploy/sock-shop.yaml")
     run_shell("kubectl create -f ./deploy/random-log-counter.yaml")
 
-    # Deploy kafka demo app
-    run_shell("kubectl create namespace kafka")
-    run_shell("helm repo add confluentinc https://confluentinc.github.io/cp-helm-charts/")
-    run_shell("helm repo update")
-    run_shell("helm install kafka-cluster --set cp-schema-registry.enabled=false,cp-kafka-rest.enabled=false,cp-kafka-connect.enabled=false,cp-control-center.enabled=false,cp-ksql-server.enabled=false confluentinc/cp-helm-charts --namespace=kafka")
-    run_shell('kubectl annotate sts/kafka-cluster-cp-kafka litmuschaos.io/chaos="true" -n kafka')
-
     # Deploy Litmus ChaosOperator to run Experiments that create incidents
-    run_shell("kubectl apply -f https://litmuschaos.github.io/pages/litmus-operator-v1.1.0.yaml")
+    run_shell("kubectl apply -f https://litmuschaos.github.io/pages/litmus-operator-v1.4.1.yaml")
 
     # Install Litmus Experiments - TEMP Workaround to set experiment versions until Chaos Hub supports in URL
-    run_shell("curl -sL https://github.com/litmuschaos/chaos-charts/archive/1.1.1.tar.gz -o litmus.tar.gz")
+    run_shell("curl -sL https://github.com/litmuschaos/chaos-charts/archive/1.4.1.tar.gz -o litmus.tar.gz")
     run_shell("tar -zxvf litmus.tar.gz")
     run_shell("rm litmus.tar.gz")
-    run_shell("find chaos-charts-1.1.1 -name experiments.yaml | grep generic | xargs kubectl apply -n sock-shop -f")
-    run_shell("find chaos-charts-1.1.1 -name experiments.yaml | grep kafka | xargs kubectl apply -n kafka -f")
+    run_shell("find chaos-charts-1.4.1 -name experiments.yaml | grep generic | xargs kubectl apply -n sock-shop -f")
     #run_shell("kubectl create -f https://hub.litmuschaos.io/api/chaos?file=charts/generic/experiments.yaml -n sock-shop")
     #run_shell("kubectl create -f https://hub.litmuschaos.io/api/chaos?file=charts/kafka/experiments.yaml -n kafka")
 
@@ -146,12 +128,11 @@ class ExperimentResult(object):
         self.status = status
         self.startTime = startTime
 
-def run_experiment(experiment: str, delay: int = 0):
+def run_experiment(experiment: str):
     """
     Run a specific experiment
 
     :param experiment:  The name of the experiment as defined in the YAML, i.e. container-kill
-    :param ramp_time:   The number of seconds to delay experiment after setup to avoid confusing setup events with experiment events in Zebrium
     :return:            ExperimentResult object with results of experiment
     """
     print_color("***************************************************************************************************", bcolors.OKBLUE)
@@ -166,16 +147,10 @@ def run_experiment(experiment: str, delay: int = 0):
         result_name = spec['metadata']['name']
         namespace = spec['metadata']['namespace']
 
-        # Create temp file with updated RAMP_TIME
-        if (delay > 0):
-            spec['spec']['experiments'][0]['spec']['components']['env'].append({'name': 'RAMP_TIME', 'value': str(delay)})
-        with open(r"temp.yaml", 'w') as temp:
-            yaml.dump(spec, temp)
-
-    print_color(f"Running Litmus ChaosEngine Experiment {experiment_file} in namespace {namespace} with delay {delay} seconds...")
+    print_color(f"Running Litmus ChaosEngine Experiment {experiment_file} in namespace {namespace}")
     print_color(f"Deploying {experiment_file}...")
     run_shell(f"kubectl delete chaosengine {result_name} -n {namespace}")
-    run_shell(f"kubectl create -f temp.yaml -n {namespace}")
+    run_shell(f"kubectl create -f ./litmus/{experiment_file} -n {namespace}")
 
     # Check status of experiment execution
     startTime = datetime.now()
@@ -194,8 +169,6 @@ def run_experiment(experiment: str, delay: int = 0):
         # View experiment results
         run_shell(f"kubectl describe chaosresult {result_name}-{experiment} -n {namespace}")
 
-        # Delete temp file
-        run_shell('rm temp.yaml')
     except:
         print_color("User has cancelled script execution.", bcolors.FAIL)
         sys.exit(2)
@@ -220,7 +193,7 @@ def test(args):
         print_color(f"Running all Litmus ChaosEngine Experiments with {args.wait} mins wait time between each one...")
         lstindex = len(experiments)
         for experiment_file in experiments:
-            result = run_experiment(experiment_file.replace('.yaml', ''), args.delay)
+            result = run_experiment(experiment_file.replace('.yaml', ''))
             experiment_results.append(result)
             print_color(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Waiting {args.wait} mins before running next experiment...", bcolors.WARNING)
             lstindex -= 1
@@ -230,7 +203,7 @@ def test(args):
         # Check experiment exists
         experiment_file = args.test + ".yaml"
         if experiment_file in experiments:
-            result = run_experiment(args.test, args.delay)
+            result = run_experiment(args.test)
             experiment_results.append(result)
         else:
             print_color(f"ERROR: {experiment_file} not found in ./litmus directory. Please check the name and try again.", bcolors.FAIL)
@@ -274,18 +247,14 @@ if __name__ == "__main__":
                         help="Set GCloud Zone to spin GKE cluster up in")
     parser_start.add_argument("-n", "--name", type=str, default="zebrium-k8s-demo",
                         help="Set GKE cluster name")
-    parser_start.add_argument("-k", "--key", type=str,
-                        help="Set Zebrium collector key for demo account")
     parser_start.set_defaults(func=start)
 
     # Test command
     parser_test = subparsers.add_parser("test", help="Run Litmus ChaosEngine Experiments inside Zebrium's demo environment.")
     parser_test.add_argument("-t", "--test", type=str, default="*",
                              help="Name of test to run based on yaml file name under /litmus folder. '*' runs all of them with wait time between each experiement.")
-    parser_test.add_argument("-w", "--wait", type=int, default=11,
+    parser_test.add_argument("-w", "--wait", type=int, default=1,
                              help="Number of minutes to wait between experiments. Defaults to 11 mins to avoid Zebrium clustering incidents together.")
-    parser_test.add_argument("-d", "--delay", type=int, default=660,
-                             help="Delay time in seconds between setting up experiment and running it. Defaults to 660 seconds.")
     parser_test.set_defaults(func=test)
 
     # List Tests Command
