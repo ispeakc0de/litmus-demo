@@ -26,7 +26,7 @@ spec:
           env:
             #Container name where chaos has to be injected
             - name: TARGET_CONTAINER
-              value: 'nginx' 
+              value: 'carts-db' 
 
             #Network interface inside target container
             - name: NETWORK_INTERFACE

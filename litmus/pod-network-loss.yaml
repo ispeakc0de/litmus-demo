@@ -26,7 +26,7 @@ spec:
           env:
             #Container name where chaos has to be injected              
             - name: TARGET_CONTAINER
-              value: 'nginx' 
+              value: 'carts-db' 
 
             - name: LIB_IMAGE
               value: 'gaiaadm/pumba:0.6.5'

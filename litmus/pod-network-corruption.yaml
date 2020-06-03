@@ -37,4 +37,4 @@ spec:
             - name: NETWORK_PACKET_CORRUPTION_PERCENTAGE
               value: "100"
             - name: TOTAL_CHAOS_DURATION
-              value: "300000"
+              value: "60"

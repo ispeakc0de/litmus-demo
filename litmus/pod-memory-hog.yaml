@@ -27,7 +27,7 @@ spec:
             # Provide name of target container
             # where chaos has to be injected
             - name: TARGET_CONTAINER
-              value: 'nginx'
+              value: 'carts-db'
 
             # Enter the amount of memory in megabytes to be consumed by the application pod
             # default: 500 (Megabytes) 

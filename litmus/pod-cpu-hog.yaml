@@ -27,7 +27,7 @@ spec:
             # Provide name of target container
             # where chaos has to be injected
             - name: TARGET_CONTAINER
-              value: 'nginx'
+              value: 'carts-db'
 
             #number of cpu cores to be consumed
             #verify the resources the app has been launched with
